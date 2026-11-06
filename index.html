@@ -87,7 +87,8 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
   <label for="gkey">Gemini APIキー（AIza…）</label>
   <input id="gkey" type="password" autocomplete="off" placeholder="aistudio.google.com で無料で発行">
   <label for="gmodel">Geminiのモデル</label>
-  <input id="gmodel" value="gemini-2.5-flash">
+  <input id="gmodel" list="gmodels" value="gemini-3.8-flash"><datalist id="gmodels"></datalist>
+  <p class="note" id="gmodelNote">キーを保存すると、使えるモデルの一覧を取りに行って自動で合わせます。</p>
   <label for="okey">OpenAI APIキー（sk-…）</label>
   <input id="okey" type="password" autocomplete="off" placeholder="チャッピーの頭脳・声・聞き取りに使います">
   <label for="akey">Anthropic APIキー（sk-ant-…）</label>
@@ -171,7 +172,7 @@ const RULES = `あなたの名前は「ラファエルさん」です。私（�
 
 // ---------- settings ----------
 const $=id=>document.getElementById(id);
-const DEF={brain:'gemini',okey:'',akey:'',gkey:'',omodel:'gpt-4o-mini',amodel:'claude-haiku-4-5',gmodel:'gemini-2.5-flash',voice:'gm:Charon',vstyle:$('vstyle').value,rate:'1',stt:'browser',pause:'1400',tts:'1',snd:'1'};
+const DEF={brain:'gemini',okey:'',akey:'',gkey:'',omodel:'gpt-4o-mini',amodel:'claude-haiku-4-5',gmodel:'gemini-3.8-flash',gtts:'',voice:'gm:Charon',vstyle:$('vstyle').value,rate:'1',stt:'browser',pause:'1400',tts:'1',snd:'1'};
 let S={...DEF};
 try{ Object.assign(S,JSON.parse(localStorage.getItem('rf_settings')||'{}')); }catch(e){}
 function saveS(){ try{ localStorage.setItem('rf_settings',JSON.stringify(S)); }catch(e){} }
@@ -180,7 +181,21 @@ function fillSheet(){ fields.forEach(k=>{ $(k).value=S[k]; }); }
 function readSheet(){ fields.forEach(k=>{ S[k]=$(k).value.trim?$(k).value.trim():$(k).value; }); saveS(); }
 $('gear').onclick=()=>{ fillSheet(); $('sheet').classList.add('open'); };
 $('close').onclick=()=>$('sheet').classList.remove('open');
-$('save').onclick=()=>{ readSheet(); $('sheet').classList.remove('open'); syncBtns(); checkReady(); };
+$('save').onclick=async()=>{ readSheet(); $('sheet').classList.remove('open'); syncBtns(); checkReady(); if(S.gkey) await refreshGemini(true); };
+// ask Google which models this key can use; pick the newest flash for chat and a tts model for voice
+let gmList=null;
+async function refreshGemini(force){
+  if(!S.gkey) return; if(gmList&&!force) return gmList;
+  try{ const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key='+encodeURIComponent(S.gkey)); const j=await r.json(); gmList=(j.models||[]).map(m=>({name:m.name.replace(/^models\//,''),methods:m.supportedGenerationMethods||[]}));
+    const chat=gmList.filter(m=>m.methods.includes('generateContent')&&/flash/.test(m.name)&&!/tts|image|audio|live|embedding|exp|preview/.test(m.name)).map(m=>m.name).sort(cmpVer).reverse();
+    const tts=gmList.filter(m=>/tts/.test(m.name)&&m.methods.includes('generateContent')).map(m=>m.name).sort(cmpVer).reverse();
+    const dl=$('gmodels'); dl.innerHTML=''; chat.forEach(n=>{ const o=document.createElement('option'); o.value=n; dl.appendChild(o); });
+    if(!gmList.some(m=>m.name===S.gmodel)&&chat[0]){ S.gmodel=chat[0]; }
+    S.gtts=tts.find(n=>/flash/.test(n))||tts[0]||''; saveS(); $('gmodelNote').textContent='使える頭脳：'+(chat.slice(0,3).join('、')||'なし')+'　／　声：'+(S.gtts||'なし（端末の声を使います）');
+  }catch(e){ $('gmodelNote').textContent='モデル一覧を取れませんでした。キーを確認してください。'; }
+  return gmList;
+}
+function cmpVer(a,b){ const n=s=>(s.match(/(\d+(?:\.\d+)?)/)||[0,0])[1]*1; return n(a)-n(b)||a.localeCompare(b); }
 
 // ---------- dom & state ----------
 const say=$('say'), log=$('log'), dot=$('dot'), stateEl=$('state'), mic=$('mic'), hint=$('hint');
@@ -236,7 +251,8 @@ async function speak(text,onend){
   if(S.voice.startsWith('gm:')&&S.gkey){
     try{
       setMode('speak','発話中');
-      const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key='+encodeURIComponent(S.gkey),{method:'POST',headers:{'Content-Type':'application/json'},
+      if(!S.gtts) await refreshGemini(); if(!S.gtts) throw new Error('声のモデルなし');
+      const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+S.gtts+':generateContent?key='+encodeURIComponent(S.gkey),{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({contents:[{parts:[{text:(S.vstyle?S.vstyle+'\n次の文を日本語で読み上げてください：\n':'')+clean(text)}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:S.voice.slice(3)}}}}})});
       if(!r.ok) throw new Error('tts '+r.status);
       const j=await r.json(); const part=j.candidates?.[0]?.content?.parts?.find(p=>p.inlineData); if(!part) throw new Error('no audio');
@@ -347,11 +363,13 @@ async function askAnthropic(onText,signal){
     for(const l of lines){ if(!l.startsWith('data: ')) continue; try{ const j=JSON.parse(l.slice(6)); if(j.type==='content_block_delta'&&j.delta?.text){ text+=j.delta.text; onText(text); } }catch(e){} } }
   return text;
 }
-async function askGemini(onText,signal){
+async function askGemini(onText,signal,retried){
   const contents=turns.map(t=>({role:t.role==='assistant'?'model':'user',parts:[{text:t.content}]}));
   const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+S.gmodel+':streamGenerateContent?alt=sse&key='+encodeURIComponent(S.gkey),{method:'POST',signal,headers:{'Content-Type':'application/json'},
     body:JSON.stringify({systemInstruction:{parts:[{text:RULES}]},contents,generationConfig:{maxOutputTokens:400,temperature:0.6}})});
-  if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error?.message||('Gemini '+r.status)); }
+  if(!r.ok){ const j=await r.json().catch(()=>({})); const msg=j.error?.message||('Gemini '+r.status);
+    if(!retried&&(r.status===404||/no longer available|not found/i.test(msg))){ const m=msg.match(/models\/(gemini[\w.-]+)/g); const sug=m&&m.length>1?m[1].replace('models/',''):null; await refreshGemini(true); if(sug) S.gmodel=sug; saveS(); return askGemini(onText,signal,true); }
+    throw new Error(msg); }
   let text=''; const rd=r.body.getReader(), dec=new TextDecoder(); let rest='';
   for(;;){ const {value,done}=await rd.read(); if(done) break; rest+=dec.decode(value,{stream:true}); const lines=rest.split('\n'); rest=lines.pop();
     for(const l of lines){ if(!l.startsWith('data: ')) continue; try{ const j=JSON.parse(l.slice(6)); const c=j.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join(''); if(c){ text+=c; onText(text); } }catch(e){} } }
@@ -378,7 +396,7 @@ async function send(q){
 }
 
 // ---------- boot ----------
-syncBtns(); checkReady();
+syncBtns(); checkReady(); if(S.gkey) refreshGemini();
 </script>
 </body>
 </html>
