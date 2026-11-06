@@ -80,9 +80,14 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
   <h2>頭脳</h2>
   <label for="brain">裏で動かすAI</label>
   <select id="brain">
+    <option value="gemini">ジェミニ（Google・無料枠あり）</option>
     <option value="openai">チャッピー（OpenAI）</option>
     <option value="anthropic">クロード（Anthropic）</option>
   </select>
+  <label for="gkey">Gemini APIキー（AIza…）</label>
+  <input id="gkey" type="password" autocomplete="off" placeholder="aistudio.google.com で無料で発行">
+  <label for="gmodel">Geminiのモデル</label>
+  <input id="gmodel" value="gemini-2.5-flash">
   <label for="okey">OpenAI APIキー（sk-…）</label>
   <input id="okey" type="password" autocomplete="off" placeholder="チャッピーの頭脳・声・聞き取りに使います">
   <label for="akey">Anthropic APIキー（sk-ant-…）</label>
@@ -95,6 +100,16 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
   <h2>声</h2>
   <label for="voice">読み上げの声</label>
   <select id="voice">
+    <optgroup label="ジェミニの声（Google・無料枠あり）">
+      <option value="gm:Charon">Charon（低い男性・落ち着き）</option>
+      <option value="gm:Orus">Orus（男性・しっかり）</option>
+      <option value="gm:Fenrir">Fenrir（男性・力強い）</option>
+      <option value="gm:Iapetus">Iapetus（男性・淡々）</option>
+      <option value="gm:Puck">Puck（男性・明るい）</option>
+      <option value="gm:Kore">Kore（女性・はっきり）</option>
+      <option value="gm:Aoede">Aoede（女性・軽やか）</option>
+      <option value="gm:Leda">Leda（女性・若い）</option>
+    </optgroup>
     <optgroup label="チャッピーの声（OpenAI・自然な日本語）">
       <option value="oa:onyx">onyx（低い男性・落ち着き）</option>
       <option value="oa:echo">echo（男性・はっきり）</option>
@@ -107,7 +122,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
     </optgroup>
     <optgroup label="端末の声（無料・この端末に入っている声）" id="devVoices"></optgroup>
   </select>
-  <label for="vstyle">声の指示（チャッピーの声のとき）</label>
+  <label for="vstyle">声の指示（ジェミニ・チャッピーの声のとき）</label>
   <input id="vstyle" value="感情を出さず、低めの声で淡々と。報告を読み上げる機械のように、一定の速さで。">
   <label for="rate">速さ</label>
   <select id="rate"><option value="0.9">ゆっくり</option><option value="1" selected>ふつう</option><option value="1.15">速め</option></select>
@@ -156,11 +171,11 @@ const RULES = `あなたの名前は「ラファエルさん」です。私（�
 
 // ---------- settings ----------
 const $=id=>document.getElementById(id);
-const DEF={brain:'openai',okey:'',akey:'',omodel:'gpt-4o-mini',amodel:'claude-haiku-4-5',voice:'oa:onyx',vstyle:$('vstyle').value,rate:'1',stt:'browser',pause:'1400',tts:'1',snd:'1'};
+const DEF={brain:'gemini',okey:'',akey:'',gkey:'',omodel:'gpt-4o-mini',amodel:'claude-haiku-4-5',gmodel:'gemini-2.5-flash',voice:'gm:Charon',vstyle:$('vstyle').value,rate:'1',stt:'browser',pause:'1400',tts:'1',snd:'1'};
 let S={...DEF};
 try{ Object.assign(S,JSON.parse(localStorage.getItem('rf_settings')||'{}')); }catch(e){}
 function saveS(){ try{ localStorage.setItem('rf_settings',JSON.stringify(S)); }catch(e){} }
-const fields=['brain','okey','akey','omodel','amodel','voice','vstyle','rate','stt','pause'];
+const fields=['brain','okey','akey','gkey','omodel','amodel','gmodel','voice','vstyle','rate','stt','pause'];
 function fillSheet(){ fields.forEach(k=>{ $(k).value=S[k]; }); }
 function readSheet(){ fields.forEach(k=>{ S[k]=$(k).value.trim?$(k).value.trim():$(k).value; }); saveS(); }
 $('gear').onclick=()=>{ fillSheet(); $('sheet').classList.add('open'); };
@@ -211,10 +226,26 @@ function loadVoices(){ try{ voices=speechSynthesis.getVoices()||[]; }catch(e){}
 if('speechSynthesis' in window){ loadVoices(); speechSynthesis.onvoiceschanged=loadVoices; }
 function unlock(){ if(unlocked) return; unlocked=true; try{ const u=new SpeechSynthesisUtterance('。'); u.volume=0; u.lang='ja-JP'; speechSynthesis.speak(u); }catch(e){} try{ audioEl=new Audio(); audioEl.play().catch(()=>{}); }catch(e){} }
 function stopSpeak(){ try{ speechSynthesis.cancel(); }catch(e){} if(audioEl){ try{ audioEl.pause(); audioEl.src=''; }catch(e){} } }
+function pcmToWav(b64,rate){ const bin=atob(b64); const n=bin.length; const buf=new ArrayBuffer(44+n); const v=new DataView(buf); const w=(o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i,s.charCodeAt(i)); };
+  w(0,'RIFF'); v.setUint32(4,36+n,true); w(8,'WAVE'); w(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true); v.setUint32(24,rate,true); v.setUint32(28,rate*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); w(36,'data'); v.setUint32(40,n,true);
+  for(let i=0;i<n;i++) v.setUint8(44+i,bin.charCodeAt(i)); return new Blob([buf],{type:'audio/wav'}); }
 const clean=t=>t.replace(/^(告|解|否|提案|確認|推定)。/,'$1。 ').replace(/\n+/g,'。 ');
 async function speak(text,onend){
   if(S.tts!=='1'){ onend&&onend(); return; }
   let done=false; const fin=()=>{ if(done) return; done=true; if(mode==='speak') setMode('idle','待機'); onend&&onend(); };
+  if(S.voice.startsWith('gm:')&&S.gkey){
+    try{
+      setMode('speak','発話中');
+      const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key='+encodeURIComponent(S.gkey),{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({contents:[{parts:[{text:(S.vstyle?S.vstyle+'\n次の文を日本語で読み上げてください：\n':'')+clean(text)}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:S.voice.slice(3)}}}}})});
+      if(!r.ok) throw new Error('tts '+r.status);
+      const j=await r.json(); const part=j.candidates?.[0]?.content?.parts?.find(p=>p.inlineData); if(!part) throw new Error('no audio');
+      const rate=parseInt((part.inlineData.mimeType.match(/rate=(\d+)/)||[])[1]||'24000');
+      const url=URL.createObjectURL(pcmToWav(part.inlineData.data,rate));
+      if(!audioEl) audioEl=new Audio(); audioEl.src=url; audioEl.playbackRate=parseFloat(S.rate); audioEl.onended=audioEl.onerror=()=>{ URL.revokeObjectURL(url); fin(); };
+      await audioEl.play(); return;
+    }catch(e){ hint.textContent='ジェミニの声が出ません（'+e.message+'）。端末の声で読みます。'; }
+  }
   if(S.voice.startsWith('oa:')&&S.okey){
     try{
       setMode('speak','発話中');
@@ -288,14 +319,14 @@ say.onclick=()=>{ if(session&&(busy||mode==='speak')){ ctl?.abort(); stopSpeak()
 
 // ---------- controls ----------
 function syncBtns(){ $('tts').textContent='読み上げ：'+(S.tts==='1'?'ON':'OFF'); $('tts').setAttribute('aria-pressed',S.tts==='1'); $('snd').textContent='効果音：'+(S.snd==='1'?'ON':'OFF'); $('snd').setAttribute('aria-pressed',S.snd==='1');
-  $('brainBtn').textContent='頭脳：'+(S.brain==='openai'?'チャッピー':'クロード'); $('brainTag').textContent=S.brain==='openai'?'· GPT':'· CLAUDE'; }
+  const BN={gemini:['ジェミニ','· GEMINI'],openai:['チャッピー','· GPT'],anthropic:['クロード','· CLAUDE']}; $('brainBtn').textContent='頭脳：'+BN[S.brain][0]; $('brainTag').textContent=BN[S.brain][1]; }
 $('tts').onclick=()=>{ S.tts=S.tts==='1'?'0':'1'; if(S.tts==='0') stopSpeak(); saveS(); syncBtns(); };
 $('snd').onclick=()=>{ S.snd=S.snd==='1'?'0':'1'; saveS(); syncBtns(); if(snd()) chime(); };
-$('brainBtn').onclick=()=>{ S.brain=S.brain==='openai'?'anthropic':'openai'; saveS(); syncBtns(); checkReady(); };
+$('brainBtn').onclick=()=>{ S.brain=S.brain==='gemini'?'openai':S.brain==='openai'?'anthropic':'gemini'; saveS(); syncBtns(); checkReady(); };
 $('vtest').onclick=()=>{ unlock(); ctx(); hint.textContent=''; stopListen(); const was=session; session=was; speak('告。音声の確認です。聞こえていれば、このまま話しかけてください。',()=>{ if(session) startListen(); }); };
 $('clear').onclick=()=>{ turns=[]; log.innerHTML=''; showNow('告。会話を消去しました。'); };
-function ready(){ return S.brain==='openai'?!!S.okey:!!S.akey; }
-function checkReady(){ if(!ready()){ setMode('off','キー未設定'); showNow('否。'+(S.brain==='openai'?'OpenAI':'Anthropic')+'のAPIキーが未設定です。「設定」から貼ってください。','err'); } else { setMode('idle','待機'); showNow('告。ラファエルさん、起動しました。\n「開始」を1回押すと、あとは声だけで会話が続きます。'); } }
+function ready(){ return S.brain==='openai'?!!S.okey:S.brain==='anthropic'?!!S.akey:!!S.gkey; }
+function checkReady(){ if(!ready()){ setMode('off','キー未設定'); showNow('否。'+({openai:'OpenAI',anthropic:'Anthropic',gemini:'Gemini'}[S.brain])+'のAPIキーが未設定です。「設定」から貼ってください。','err'); } else { setMode('idle','待機'); showNow('告。ラファエルさん、起動しました。\n「開始」を1回押すと、あとは声だけで会話が続きます。'); } }
 
 // ---------- ask ----------
 async function askOpenAI(onText,signal){
@@ -316,6 +347,16 @@ async function askAnthropic(onText,signal){
     for(const l of lines){ if(!l.startsWith('data: ')) continue; try{ const j=JSON.parse(l.slice(6)); if(j.type==='content_block_delta'&&j.delta?.text){ text+=j.delta.text; onText(text); } }catch(e){} } }
   return text;
 }
+async function askGemini(onText,signal){
+  const contents=turns.map(t=>({role:t.role==='assistant'?'model':'user',parts:[{text:t.content}]}));
+  const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+S.gmodel+':streamGenerateContent?alt=sse&key='+encodeURIComponent(S.gkey),{method:'POST',signal,headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({systemInstruction:{parts:[{text:RULES}]},contents,generationConfig:{maxOutputTokens:400,temperature:0.6}})});
+  if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error?.message||('Gemini '+r.status)); }
+  let text=''; const rd=r.body.getReader(), dec=new TextDecoder(); let rest='';
+  for(;;){ const {value,done}=await rd.read(); if(done) break; rest+=dec.decode(value,{stream:true}); const lines=rest.split('\n'); rest=lines.pop();
+    for(const l of lines){ if(!l.startsWith('data: ')) continue; try{ const j=JSON.parse(l.slice(6)); const c=j.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join(''); if(c){ text+=c; onText(text); } }catch(e){} } }
+  return text;
+}
 async function send(q){
   if(busy||!ready()) return; busy=true; hint.textContent='';
   addLog('me',q); turns.push({role:'user',content:q}); if(turns.length>24) turns=turns.slice(-24);
@@ -323,7 +364,7 @@ async function send(q){
   ctl=new AbortController(); let first=true;
   const onText=t=>{ if(first){ first=false; resetSay(); cls=''; chime(); setMode('speak','発話中'); } renderSay(t,false); };
   try{
-    const text=await (S.brain==='openai'?askOpenAI(onText,ctl.signal):askAnthropic(onText,ctl.signal));
+    const text=await (S.brain==='openai'?askOpenAI(onText,ctl.signal):S.brain==='anthropic'?askAnthropic(onText,ctl.signal):askGemini(onText,ctl.signal));
     if(!text) throw new Error('応答が空でした');
     turns.push({role:'assistant',content:text}); renderSay(text,true); addLog('rf',text);
     const after=()=>{ busy=false; if(session) setTimeout(()=>{ if(!busy&&!listening) startListen(); },300); };
