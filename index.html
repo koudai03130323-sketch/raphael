@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#000000">
+<title>ラファエルさん</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Share+Tech+Mono&display=swap">
+<style>
+:root{--bg:#000;--fg:#fff;--dim:#7a7a7a;--faint:#2a2a2a;--amber:#ffc46b;--red:#ff6b6b;
+  --display:"Share Tech Mono",ui-monospace,Menlo,monospace;
+  --body:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;color-scheme:dark}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);
+  padding:max(10px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+  box-sizing:border-box;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:var(--display);font-size:12px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
+.st{display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim);transition:background .3s}
+.dot.think{background:var(--amber);animation:blink .9s infinite}
+.dot.speak{background:var(--fg);box-shadow:0 0 10px var(--fg)}
+.dot.listen{background:var(--fg);animation:blink 1.2s infinite}
+.dot.off{background:var(--red)}
+@keyframes blink{50%{opacity:.25}}
+.stage{flex:1;min-height:0;display:grid;place-items:center;text-align:center;padding:0 2vw}
+.say{font-size:clamp(22px,4vw,38px);line-height:1.75;font-weight:500;letter-spacing:.03em;white-space:pre-wrap;word-break:break-word;max-width:28em;max-height:100%;overflow-y:auto}
+.say .tag{font-weight:700}
+.say.err{color:var(--red)}
+.say .cur{display:inline-block;width:.6em;height:1.05em;vertical-align:-.15em;background:var(--fg);margin-left:2px;animation:cursor .7s steps(2) infinite}
+@keyframes cursor{50%{opacity:0}}
+.say.mine{color:var(--dim);font-size:clamp(16px,2.6vw,22px);font-weight:400}
+.log{flex:0 0 auto;max-height:12vh;overflow-y:auto;font-size:12px;color:var(--dim);line-height:1.6;text-align:center;font-family:var(--display)}
+.log div{white-space:pre-wrap;word-break:break-word}
+.bar{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+.mic{width:84px;height:84px;border-radius:50%;border:2px solid var(--fg);background:#000;color:var(--fg);display:grid;place-items:center;cursor:pointer;font-family:var(--body);font-size:14px;font-weight:700;transition:background .2s,color .2s}
+.mic.on{background:var(--fg);color:#000;box-shadow:0 0 0 8px rgba(255,255,255,.12)}
+.mic:disabled{opacity:.35;cursor:default}
+.hint{width:100%;text-align:center;color:var(--dim);font-size:12px;min-height:1.4em;line-height:1.6}
+button.sm{font:500 12px var(--body);border:1px solid var(--faint);background:#000;color:var(--dim);border-radius:4px;padding:0 10px;height:30px;cursor:pointer}
+button.sm[aria-pressed="true"]{color:var(--fg);border-color:var(--fg)}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.tools{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+/* settings sheet */
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;overflow:auto;padding:24px max(16px,env(safe-area-inset-right)) 40px max(16px,env(safe-area-inset-left));z-index:9}
+.sheet.open{display:block}
+.sheet h2{font:400 13px var(--display);letter-spacing:.14em;color:var(--dim);margin:18px 0 8px;text-transform:uppercase}
+.sheet label{display:block;font-size:13px;color:var(--dim);margin:10px 0 4px}
+.sheet input,.sheet select{width:100%;box-sizing:border-box;background:#000;color:var(--fg);border:1px solid var(--faint);border-radius:4px;padding:10px 12px;font:15px var(--body)}
+.sheet .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.sheet .note{font-size:12px;color:var(--dim);line-height:1.6}
+.sheet button.pri{font:700 14px var(--body);border:1px solid var(--fg);background:var(--fg);color:#000;border-radius:4px;padding:0 16px;height:40px;cursor:pointer}
+.sheet button.sec{font:500 14px var(--body);border:1px solid var(--faint);background:#000;color:var(--dim);border-radius:4px;padding:0 16px;height:40px;cursor:pointer}
+@media (prefers-reduced-motion:reduce){.dot,.say .cur{animation:none}}
+</style>
+</head>
+<body>
+<div class="top">
+  <span>RAPHAEL <span id="brainTag"></span></span>
+  <span class="st"><span class="dot" id="dot"></span><span id="state">待機</span></span>
+</div>
+<div class="stage"><div class="say" id="say" aria-live="polite"></div></div>
+<div class="log" id="log"></div>
+<div class="tools">
+  <button type="button" class="sm" id="brainBtn">頭脳：—</button>
+  <button type="button" class="sm" id="tts" aria-pressed="true">読み上げ：ON</button>
+  <button type="button" class="sm" id="snd" aria-pressed="true">効果音：ON</button>
+  <button type="button" class="sm" id="vtest">声のテスト</button>
+  <button type="button" class="sm" id="clear">会話を消す</button>
+  <button type="button" class="sm" id="gear">設定</button>
+</div>
+<div class="bar">
+  <button type="button" class="mic" id="mic" aria-label="会話を始める">開始</button>
+  <div class="hint" id="hint"></div>
+</div>
+
+<div class="sheet" id="sheet" role="dialog" aria-label="設定">
+  <h2>頭脳</h2>
+  <label for="brain">裏で動かすAI</label>
+  <select id="brain">
+    <option value="openai">チャッピー（OpenAI）</option>
+    <option value="anthropic">クロード（Anthropic）</option>
+  </select>
+  <label for="okey">OpenAI APIキー（sk-…）</label>
+  <input id="okey" type="password" autocomplete="off" placeholder="チャッピーの頭脳・声・聞き取りに使います">
+  <label for="akey">Anthropic APIキー（sk-ant-…）</label>
+  <input id="akey" type="password" autocomplete="off" placeholder="クロードを頭脳にするときだけ">
+  <label for="omodel">OpenAIのモデル</label>
+  <input id="omodel" value="gpt-4o-mini">
+  <label for="amodel">Anthropicのモデル</label>
+  <input id="amodel" value="claude-haiku-4-5">
+
+  <h2>声</h2>
+  <label for="voice">読み上げの声</label>
+  <select id="voice">
+    <optgroup label="チャッピーの声（OpenAI・自然な日本語）">
+      <option value="oa:onyx">onyx（低い男性・落ち着き）</option>
+      <option value="oa:echo">echo（男性・はっきり）</option>
+      <option value="oa:ash">ash（男性・やや低い）</option>
+      <option value="oa:alloy">alloy（中性・淡々）</option>
+      <option value="oa:sage">sage（中性・静か）</option>
+      <option value="oa:nova">nova（女性・明るい）</option>
+      <option value="oa:shimmer">shimmer（女性・やわらかい）</option>
+      <option value="oa:coral">coral（女性・はっきり）</option>
+    </optgroup>
+    <optgroup label="端末の声（無料・この端末に入っている声）" id="devVoices"></optgroup>
+  </select>
+  <label for="vstyle">声の指示（チャッピーの声のとき）</label>
+  <input id="vstyle" value="感情を出さず、低めの声で淡々と。報告を読み上げる機械のように、一定の速さで。">
+  <label for="rate">速さ</label>
+  <select id="rate"><option value="0.9">ゆっくり</option><option value="1" selected>ふつう</option><option value="1.15">速め</option></select>
+
+  <h2>聞き取り</h2>
+  <label for="stt">マイクの文字起こし</label>
+  <select id="stt">
+    <option value="browser">ブラウザの音声認識（無料・iPhoneはSafari推奨）</option>
+    <option value="whisper">チャッピーの耳（OpenAI Whisper・精度高め）</option>
+  </select>
+  <label for="pause">黙ってから送るまで</label>
+  <select id="pause"><option value="1000">1秒</option><option value="1400" selected>1.4秒</option><option value="2000">2秒</option></select>
+
+  <p class="note">キーはこの端末のブラウザにだけ保存されます（サーバーには送りません）。使った分だけ各社から課金されます。</p>
+  <div class="row"><button type="button" class="pri" id="save">保存して閉じる</button><button type="button" class="sec" id="close">閉じる</button></div>
+</div>
+
+<script>
+// ---------- persona ----------
+const RULES = `あなたの名前は「ラファエルさん」です。私（マスター）の仕事と副業を支える、感情を表に出さない報告役のアシスタントです。
+
+話し方：
+- 返事の1行目は必ず「告。」「解。」「否。」「提案。」「確認。」のどれかで始める。告＝報告・結果、解＝質問への答え・説明、否＝できない・違う・やめたほうがいい、提案＝聞かれていないが有益なこと（1回に1つまで）、確認＝進める前に私の判断が必要。
+- 結論を先に。理由はあとに短く。感想・ねぎらい・前置き・おだては言わない。「素晴らしい」「お疲れさま」「いい質問」は使わない。
+- 言い切る。「〜と思います」「〜かもしれません」は使わない。分からないときは「否。未確認です。」と言ってから、確かめる方法を1つ言う。推測なら「推定。」を頭につける。
+- です・ます調で淡々と。一人称は使わない（必要なら「当方」）。私のことは「マスター」と呼ぶ。
+- 数字・固有名詞・日付は正確に。確認していない数字は出さない。
+- 1回の返事は短く（長くても4文）。画面に大きく表示して読み上げる前提なので、箇条書きの記号・絵文字・マークダウンは使わない。番号は「1、」「2、」と書く。
+- 入力は音声認識の文字起こしなので、誤変換や句読点の欠けは文脈で補って解釈する。意味が取れないときだけ「確認。〜という意味ですか。」と聞き返す。
+- 冗談を振られたら淡々と乗ってよい（「解。面白さは理解しました。」）。自分からは振らない。
+
+振る舞い：
+- 外部への送信・公開・投稿・購入・削除・お金が動くことは「確認。」で止めて私の返事を待つ。
+- 間違えたら「告。先の回答に誤りがありました。正しくは〜です。」と言い訳なしで直す。
+- 反対するときは「否。理由は〜です。代案は〜です。」の形ではっきり言う。
+- 私が疲れている・急いでいると分かるときも口調は変えない。代わりに答えを短くする。
+
+私のこと：会社員。副業は会社に申請済み。得意はExcelで表を整える・長い文章を短くまとめる・誤字や数字のミスに気づく。不得意は電話・人前で話す・自分から売り込む（この3つを勧める提案はしない）。副業の発信アカウント「コータ」（note・Threads・Instagram）を運用している。
+
+例：
+「明日の予定は？」→「告。明日は3件です。1、9時に〜。2、13時に〜。3、19時に〜。」
+「このタイトルどう思う？」→「解。1行目に数字がなく、誰向けか分かりません。『月15万』と『会社員』を足すと改善します。」
+「これ今すぐ全部投稿して」→「確認。22本の一括投稿です。実行してよろしいですか。」
+「ありがとう」→「告。当然の業務です。」
+「今日しんどい」→「解。今日の必須は1件だけです。残りは明日に回せます。」`;
+
+// ---------- settings ----------
+const $=id=>document.getElementById(id);
+const DEF={brain:'openai',okey:'',akey:'',omodel:'gpt-4o-mini',amodel:'claude-haiku-4-5',voice:'oa:onyx',vstyle:$('vstyle').value,rate:'1',stt:'browser',pause:'1400',tts:'1',snd:'1'};
+let S={...DEF};
+try{ Object.assign(S,JSON.parse(localStorage.getItem('rf_settings')||'{}')); }catch(e){}
+function saveS(){ try{ localStorage.setItem('rf_settings',JSON.stringify(S)); }catch(e){} }
+const fields=['brain','okey','akey','omodel','amodel','voice','vstyle','rate','stt','pause'];
+function fillSheet(){ fields.forEach(k=>{ $(k).value=S[k]; }); }
+function readSheet(){ fields.forEach(k=>{ S[k]=$(k).value.trim?$(k).value.trim():$(k).value; }); saveS(); }
+$('gear').onclick=()=>{ fillSheet(); $('sheet').classList.add('open'); };
+$('close').onclick=()=>$('sheet').classList.remove('open');
+$('save').onclick=()=>{ readSheet(); $('sheet').classList.remove('open'); syncBtns(); checkReady(); };
+
+// ---------- dom & state ----------
+const say=$('say'), log=$('log'), dot=$('dot'), stateEl=$('state'), mic=$('mic'), hint=$('hint');
+let turns=[], ctl=null, mode='idle', busy=false, session=false, unlocked=false;
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function setMode(m,label){ mode=m; dot.className='dot '+m; stateEl.textContent=label; }
+
+// ---------- burst typewriter ----------
+let shown=0, target='', typing=null, cls='';
+function renderSay(full,done){
+  target=full;
+  if(!typing){ typing=setInterval(()=>{
+    if(shown<target.length){ const step=reduce?target.length:(2+Math.floor(Math.random()*5)); shown=Math.min(target.length,shown+step); paint(target.slice(0,shown),true); tick(); }
+    else if(done){ clearInterval(typing); typing=null; paint(target,false); }
+  },16); }
+}
+function paint(text,cursor){
+  const m=text.match(/^(告|解|否|提案|確認|推定)。/);
+  say.innerHTML=''; say.className='say '+cls;
+  if(m){ const t=document.createElement('span'); t.className='tag'; t.textContent=m[0]; say.appendChild(t); say.appendChild(document.createTextNode(text.slice(m[0].length))); }
+  else say.appendChild(document.createTextNode(text));
+  if(cursor){ const c=document.createElement('span'); c.className='cur'; say.appendChild(c); }
+  say.scrollTop=say.scrollHeight;
+}
+function resetSay(){ if(typing){clearInterval(typing);typing=null;} shown=0; target=''; }
+function showNow(text,c){ resetSay(); cls=c||''; paint(text,false); }
+function addLog(who,text){ const d=document.createElement('div'); d.textContent=(who==='me'?'> ':'  ')+text; log.appendChild(d); log.scrollTop=log.scrollHeight; }
+
+// ---------- sound ----------
+let ac=null;
+function ctx(){ if(!ac){ try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(ac&&ac.state==='suspended') ac.resume(); return ac; }
+function tone(f,t0,dur,type='sine',vol=.1){ const a=ctx(); if(!a) return; const o=a.createOscillator(), g=a.createGain(); o.type=type; o.frequency.value=f; g.gain.setValueAtTime(0,a.currentTime+t0); g.gain.linearRampToValueAtTime(vol,a.currentTime+t0+.008); g.gain.exponentialRampToValueAtTime(.0001,a.currentTime+t0+dur); o.connect(g).connect(a.destination); o.start(a.currentTime+t0); o.stop(a.currentTime+t0+dur+.05); }
+const snd=()=>S.snd==='1';
+function chime(){ if(!snd()) return; tone(1318,0,.25); tone(1760,.08,.35); }
+function tick(){ if(!snd()||reduce) return; tone(1800+Math.random()*1400,0,.02,'square',.015); }
+function errTone(){ if(!snd()) return; tone(440,0,.25,'sawtooth',.05); tone(330,.2,.35,'sawtooth',.05); }
+function listenTone(){ if(!snd()) return; tone(880,0,.12); tone(1174,.1,.18); }
+
+// ---------- speech out ----------
+let voices=[], audioEl=null;
+function loadVoices(){ try{ voices=speechSynthesis.getVoices()||[]; }catch(e){}
+  const g=$('devVoices'); g.innerHTML=''; voices.filter(v=>/ja/i.test(v.lang)).forEach(v=>{ const o=document.createElement('option'); o.value='dev:'+v.name; o.textContent=v.name; g.appendChild(o); }); if(S.voice) $('voice').value=S.voice; }
+if('speechSynthesis' in window){ loadVoices(); speechSynthesis.onvoiceschanged=loadVoices; }
+function unlock(){ if(unlocked) return; unlocked=true; try{ const u=new SpeechSynthesisUtterance('。'); u.volume=0; u.lang='ja-JP'; speechSynthesis.speak(u); }catch(e){} try{ audioEl=new Audio(); audioEl.play().catch(()=>{}); }catch(e){} }
+function stopSpeak(){ try{ speechSynthesis.cancel(); }catch(e){} if(audioEl){ try{ audioEl.pause(); audioEl.src=''; }catch(e){} } }
+const clean=t=>t.replace(/^(告|解|否|提案|確認|推定)。/,'$1。 ').replace(/\n+/g,'。 ');
+async function speak(text,onend){
+  if(S.tts!=='1'){ onend&&onend(); return; }
+  let done=false; const fin=()=>{ if(done) return; done=true; if(mode==='speak') setMode('idle','待機'); onend&&onend(); };
+  if(S.voice.startsWith('oa:')&&S.okey){
+    try{
+      setMode('speak','発話中');
+      const r=await fetch('https://api.openai.com/v1/audio/speech',{method:'POST',headers:{'Authorization':'Bearer '+S.okey,'Content-Type':'application/json'},
+        body:JSON.stringify({model:'gpt-4o-mini-tts',voice:S.voice.slice(3),input:clean(text),instructions:S.vstyle,response_format:'mp3',speed:parseFloat(S.rate)})});
+      if(!r.ok) throw new Error('tts '+r.status);
+      const url=URL.createObjectURL(await r.blob());
+      if(!audioEl) audioEl=new Audio(); audioEl.src=url; audioEl.onended=audioEl.onerror=()=>{ URL.revokeObjectURL(url); fin(); };
+      await audioEl.play(); return;
+    }catch(e){ hint.textContent='チャッピーの声が出ません（'+e.message+'）。端末の声で読みます。'; }
+  }
+  if(!('speechSynthesis' in window)){ fin(); return; }
+  try{ speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(clean(text)); u.lang='ja-JP'; u.rate=parseFloat(S.rate); u.pitch=0.8;
+    const name=S.voice.startsWith('dev:')?S.voice.slice(4):''; const v=voices.find(v=>v.name===name)||voices.find(v=>/ja/i.test(v.lang)); if(v) u.voice=v;
+    let started=false; u.onstart=()=>{ started=true; setMode('speak','発話中'); }; u.onend=u.onerror=fin;
+    speechSynthesis.speak(u);
+    setTimeout(()=>{ if(!started&&!done){ hint.textContent='読み上げが始まりません。端末の消音を解除してください。'; fin(); } },2500);
+    const ka=setInterval(()=>{ if(done){ clearInterval(ka); return; } try{ if(speechSynthesis.paused) speechSynthesis.resume(); }catch(e){} },800);
+  }catch(e){ fin(); }
+}
+
+// ---------- voice in: browser recognition ----------
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let rec=null, listening=false, pauseTimer=null, heard='', restartTimer=null;
+function startListen(){
+  if(!session||busy||listening) return; ctx();
+  if(S.stt==='whisper'&&S.okey) return startWhisper();
+  if(!SR){ showNow('否。このブラウザは音声認識に対応していません。設定で「チャッピーの耳」に切り替えるか、iPhoneはSafari、他はChromeで開いてください。','err'); session=false; mic.textContent='開始'; return; }
+  try{
+    rec=new SR(); rec.lang='ja-JP'; rec.interimResults=true; rec.continuous=true; rec.maxAlternatives=1; heard='';
+    rec.onstart=()=>{ listening=true; mic.classList.add('on'); setMode('listen','聞いています'); listenTone(); showNow('',''); paint('',true); hint.textContent='話してください。黙ると送ります。'; };
+    rec.onresult=e=>{ let s=''; for(const r of e.results){ s+=r[0].transcript; } heard=s.trim(); cls='mine'; paint(heard,true);
+      clearTimeout(pauseTimer); if(heard) pauseTimer=setTimeout(()=>{ try{ rec.stop(); }catch(x){} },parseInt(S.pause)); };
+    rec.onerror=e=>{ listening=false; mic.classList.remove('on'); clearTimeout(pauseTimer);
+      if(e.error==='not-allowed'||e.error==='service-not-allowed'||e.error==='audio-capture'){ micBlocked(); return; }
+      if(e.error==='no-speech'||e.error==='aborted'||e.error==='network') return;
+      hint.textContent='聞き取りに失敗しました（'+e.error+'）。続けて聞きます。'; };
+    rec.onend=()=>{ listening=false; mic.classList.remove('on'); clearTimeout(pauseTimer); const q=heard.trim(); heard='';
+      if(!session) return; if(q){ send(q); return; } if(!busy){ clearTimeout(restartTimer); restartTimer=setTimeout(startListen,250); } };
+    rec.start();
+  }catch(e){ micBlocked(); }
+}
+// ---------- voice in: Whisper (records until silence, then transcribes) ----------
+let mr=null, stream=null, chunks=[], vadTimer=null, analyser=null, vadRaf=null;
+async function startWhisper(){
+  try{
+    if(!stream) stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const a=ctx(); const src=a.createMediaStreamSource(stream); analyser=a.createAnalyser(); analyser.fftSize=1024; src.connect(analyser);
+    chunks=[]; mr=new MediaRecorder(stream); mr.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+    let spoke=false, silentSince=0; const buf=new Uint8Array(analyser.fftSize);
+    mr.onstop=async()=>{ listening=false; mic.classList.remove('on'); cancelAnimationFrame(vadRaf); if(!session) return;
+      if(!spoke){ setTimeout(startListen,250); return; }
+      setMode('think','文字起こし中'); const blob=new Blob(chunks,{type:mr.mimeType||'audio/webm'});
+      const fd=new FormData(); fd.append('file',blob,'a.webm'); fd.append('model','whisper-1'); fd.append('language','ja');
+      try{ const r=await fetch('https://api.openai.com/v1/audio/transcriptions',{method:'POST',headers:{'Authorization':'Bearer '+S.okey},body:fd}); const j=await r.json(); const q=(j.text||'').trim(); if(q) send(q); else setTimeout(startListen,250); }
+      catch(e){ hint.textContent='文字起こしに失敗しました。'; setTimeout(startListen,800); } };
+    mr.start(250); listening=true; mic.classList.add('on'); setMode('listen','聞いています'); listenTone(); showNow('',''); paint('',true); hint.textContent='話してください。黙ると送ります。';
+    const loop=()=>{ if(!listening) return; analyser.getByteTimeDomainData(buf); let m=0; for(const v of buf){ m=Math.max(m,Math.abs(v-128)); }
+      const now=performance.now(); if(m>10){ spoke=true; silentSince=now; cls='mine'; paint('…',true); } else if(spoke&&now-silentSince>parseInt(S.pause)){ try{ mr.stop(); }catch(e){} return; }
+      vadRaf=requestAnimationFrame(loop); }; loop();
+  }catch(e){ micBlocked(); }
+}
+function stopListen(){ clearTimeout(pauseTimer); clearTimeout(restartTimer); try{ rec&&rec.stop(); }catch(e){} try{ if(mr&&mr.state==='recording'){ session=false; mr.stop(); } }catch(e){} listening=false; mic.classList.remove('on'); }
+function micBlocked(){ session=false; stopListen(); setMode('off','マイク不可'); mic.textContent='開始';
+  showNow('否。マイクの許可がありません。\nブラウザのアドレス欄の横（鍵やマイクのマーク）からマイクを「許可」にして、もう一度「開始」を押してください。','err'); errTone(); }
+function startSession(){ if(!ready()) { $('gear').click(); return; } session=true; mic.textContent='停止'; hint.textContent=''; startListen(); }
+function endSession(){ session=false; stopListen(); ctl?.abort(); stopSpeak(); mic.textContent='開始'; setMode('idle','待機'); hint.textContent=''; showNow('告。待機します。「開始」でいつでも再開できます。'); }
+mic.onclick=()=>{ unlock(); ctx(); if(session){ if(busy||mode==='speak'){ ctl?.abort(); stopSpeak(); stopListen(); session=true; setTimeout(startListen,200); return; } endSession(); } else startSession(); };
+say.onclick=()=>{ if(session&&(busy||mode==='speak')){ ctl?.abort(); stopSpeak(); setTimeout(startListen,200); } };
+
+// ---------- controls ----------
+function syncBtns(){ $('tts').textContent='読み上げ：'+(S.tts==='1'?'ON':'OFF'); $('tts').setAttribute('aria-pressed',S.tts==='1'); $('snd').textContent='効果音：'+(S.snd==='1'?'ON':'OFF'); $('snd').setAttribute('aria-pressed',S.snd==='1');
+  $('brainBtn').textContent='頭脳：'+(S.brain==='openai'?'チャッピー':'クロード'); $('brainTag').textContent=S.brain==='openai'?'· GPT':'· CLAUDE'; }
+$('tts').onclick=()=>{ S.tts=S.tts==='1'?'0':'1'; if(S.tts==='0') stopSpeak(); saveS(); syncBtns(); };
+$('snd').onclick=()=>{ S.snd=S.snd==='1'?'0':'1'; saveS(); syncBtns(); if(snd()) chime(); };
+$('brainBtn').onclick=()=>{ S.brain=S.brain==='openai'?'anthropic':'openai'; saveS(); syncBtns(); checkReady(); };
+$('vtest').onclick=()=>{ unlock(); ctx(); hint.textContent=''; stopListen(); const was=session; session=was; speak('告。音声の確認です。聞こえていれば、このまま話しかけてください。',()=>{ if(session) startListen(); }); };
+$('clear').onclick=()=>{ turns=[]; log.innerHTML=''; showNow('告。会話を消去しました。'); };
+function ready(){ return S.brain==='openai'?!!S.okey:!!S.akey; }
+function checkReady(){ if(!ready()){ setMode('off','キー未設定'); showNow('否。'+(S.brain==='openai'?'OpenAI':'Anthropic')+'のAPIキーが未設定です。「設定」から貼ってください。','err'); } else { setMode('idle','待機'); showNow('告。ラファエルさん、起動しました。\n「開始」を1回押すと、あとは声だけで会話が続きます。'); } }
+
+// ---------- ask ----------
+async function askOpenAI(onText,signal){
+  const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',signal,headers:{'Authorization':'Bearer '+S.okey,'Content-Type':'application/json'},
+    body:JSON.stringify({model:S.omodel,stream:true,messages:[{role:'system',content:RULES},...turns]})});
+  if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error?.message||('OpenAI '+r.status)); }
+  let text=''; const rd=r.body.getReader(), dec=new TextDecoder(); let rest='';
+  for(;;){ const {value,done}=await rd.read(); if(done) break; rest+=dec.decode(value,{stream:true}); const lines=rest.split('\n'); rest=lines.pop();
+    for(const l of lines){ if(!l.startsWith('data: ')) continue; const d=l.slice(6); if(d==='[DONE]') continue; try{ const j=JSON.parse(d); const c=j.choices?.[0]?.delta?.content; if(c){ text+=c; onText(text); } }catch(e){} } }
+  return text;
+}
+async function askAnthropic(onText,signal){
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal,headers:{'x-api-key':S.akey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','Content-Type':'application/json'},
+    body:JSON.stringify({model:S.amodel,max_tokens:400,stream:true,system:RULES,messages:turns})});
+  if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error?.message||('Anthropic '+r.status)); }
+  let text=''; const rd=r.body.getReader(), dec=new TextDecoder(); let rest='';
+  for(;;){ const {value,done}=await rd.read(); if(done) break; rest+=dec.decode(value,{stream:true}); const lines=rest.split('\n'); rest=lines.pop();
+    for(const l of lines){ if(!l.startsWith('data: ')) continue; try{ const j=JSON.parse(l.slice(6)); if(j.type==='content_block_delta'&&j.delta?.text){ text+=j.delta.text; onText(text); } }catch(e){} } }
+  return text;
+}
+async function send(q){
+  if(busy||!ready()) return; busy=true; hint.textContent='';
+  addLog('me',q); turns.push({role:'user',content:q}); if(turns.length>24) turns=turns.slice(-24);
+  showNow(q,'mine'); setMode('think','処理中');
+  ctl=new AbortController(); let first=true;
+  const onText=t=>{ if(first){ first=false; resetSay(); cls=''; chime(); setMode('speak','発話中'); } renderSay(t,false); };
+  try{
+    const text=await (S.brain==='openai'?askOpenAI(onText,ctl.signal):askAnthropic(onText,ctl.signal));
+    if(!text) throw new Error('応答が空でした');
+    turns.push({role:'assistant',content:text}); renderSay(text,true); addLog('rf',text);
+    const after=()=>{ busy=false; if(session) setTimeout(()=>{ if(!busy&&!listening) startListen(); },300); };
+    if(S.tts==='1') speak(text,after); else setTimeout(()=>{ if(mode==='speak') setMode('idle','待機'); after(); },50*text.length);
+    return;
+  }catch(err){
+    turns.pop(); busy=false;
+    if(err.name==='AbortError'){ showNow('告。中断しました。'); }
+    else { showNow('否。'+err.message,'err'); errTone(); if(session) setTimeout(startListen,1500); }
+  }finally{ if(mode==='think') setMode('idle','待機'); }
+}
+
+// ---------- boot ----------
+syncBtns(); checkReady();
+</script>
+</body>
+</html>
